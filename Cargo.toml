@@ -3,7 +3,6 @@ name = "tokio-kcp-neo"
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"
-build = "build.rs"
 description = "A Tokio-based KCP library for Rust."
 license = "MIT"
 repository = "https://github.com/czf0613/TokioKcp"
@@ -11,6 +10,15 @@ keywords = ["tokio", "kcp", "async", "network"]
 categories = ["asynchronous", "network-programming"]
 
 [dependencies]
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
 
 [build-dependencies]
 cc = "1"
+
+[dev-dependencies]
+rand = "0.9"
