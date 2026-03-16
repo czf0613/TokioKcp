@@ -2,7 +2,7 @@
 
 `tokio-kcp-neo` 是一个基于 Tokio 的 KCP Rust library。
 
-这个仓库内置了一份经过修改的 KCP C 实现，不依赖系统预装的 KCP 库；构建时会通过 `build.rs` 自动把 `native/src/ikcp.c` 编译成静态库，并和 Rust 代码一起链接。
+这个仓库内置了一份经过修改的 KCP C 实现，不依赖系统预装的 KCP 库；构建时会通过 `build.rs` 自动把 `native/src/ikcp.c` 编译成静态库，并和 Rust 代码一起链接。这份 C 代码来自 [czf0613/kcp](https://github.com/czf0613/kcp) 项目。
 
 ## 当前状态
 

@@ -1,0 +1,2 @@
+# Exclude vendored native code from GitHub language statistics.
+native/** linguist-vendored
