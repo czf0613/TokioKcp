@@ -37,8 +37,7 @@ enum KcpAction {
     Enqueue(Vec<u8>),
 }
 
-pub type DGCallBack =
-    for<'a> fn(&'a [u8]) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
+pub type DGCallBack = for<'a> fn(&'a [u8]) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
 
 struct KcpCtx {
     dispatch_queue: mpsc::UnboundedSender<KcpAction>,
@@ -80,12 +79,27 @@ fn get_offset_time_ms() -> u32 {
 
 impl TokioKcp {
     pub const DEFAULT_MTU: u32 = 1400;
+    pub const DEFAULT_REFRESH_GAP: u64 = 20;
 
     pub fn new(conv_id: u32, on_send: DGCallBack) -> Self {
-        Self::with_mtu(conv_id, Self::DEFAULT_MTU, on_send)
+        Self::with_mtu_and_refresh_gap(
+            conv_id,
+            Self::DEFAULT_MTU,
+            Self::DEFAULT_REFRESH_GAP,
+            on_send,
+        )
     }
 
     pub fn with_mtu(conv_id: u32, mtu: u32, on_send: DGCallBack) -> Self {
+        Self::with_mtu_and_refresh_gap(conv_id, mtu, Self::DEFAULT_REFRESH_GAP, on_send)
+    }
+
+    pub fn with_mtu_and_refresh_gap(
+        conv_id: u32,
+        mtu: u32,
+        refresh_gap: u64,
+        on_send: DGCallBack,
+    ) -> Self {
         let (tx, mut rx) = mpsc::unbounded_channel::<KcpAction>();
         let transport = on_send;
 
@@ -118,7 +132,7 @@ impl TokioKcp {
 
             time_driver: tokio::spawn(async move {
                 while !stop_flag1.load(Ordering::Acquire) {
-                    tokio::time::sleep(Duration::from_millis(20)).await;
+                    tokio::time::sleep(Duration::from_millis(refresh_gap)).await;
                     let _ = tx.send(KcpAction::Update);
                 }
             }),

@@ -25,7 +25,7 @@
 
 ```toml
 [dependencies]
-tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.0.1" }
+tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.0.2" }
 ```
 
 ## 设计说明
@@ -44,9 +44,16 @@ tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.0.1"
 ```rust
 impl TokioKcp {
     pub const DEFAULT_MTU: u32 = 1400;
+    pub const DEFAULT_REFRESH_GAP: u64 = 20;
 
     pub fn new(conv_id: u32, on_send: DGCallBack) -> Self;
     pub fn with_mtu(conv_id: u32, mtu: u32, on_send: DGCallBack) -> Self;
+    pub fn with_mtu_and_refresh_gap(
+        conv_id: u32,
+        mtu: u32,
+        refresh_gap: u64,
+        on_send: DGCallBack,
+    ) -> Self;
 
     pub fn write(&self, data: &[u8]);
     pub fn enqueue(&self, data: &[u8]);
