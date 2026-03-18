@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-type TransportFuture<'a> = Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
+type TransportFuture = Pin<Box<dyn Future<Output = bool> + Send + 'static>>;
 
 static LEFT_PEER: LazyLock<Mutex<Option<Weak<TokioKcp>>>> = LazyLock::new(|| Mutex::new(None));
 static RIGHT_PEER: LazyLock<Mutex<Option<Weak<TokioKcp>>>> = LazyLock::new(|| Mutex::new(None));
@@ -18,34 +18,26 @@ fn should_drop() -> bool {
     DROP_RNG.lock().unwrap().random_bool(0.5)
 }
 
-fn peer_transport<'a>(
+fn peer_transport(
     peer_slot: &'static LazyLock<Mutex<Option<Weak<TokioKcp>>>>,
-    data: &'a [u8],
-) -> TransportFuture<'a> {
-    let payload = data.to_vec();
-    let peer = peer_slot.lock().unwrap().clone();
-    let drop_packet = should_drop();
+) -> impl Fn(Vec<u8>) -> TransportFuture + Copy {
+    move |payload: Vec<u8>| {
+        let peer = peer_slot.lock().unwrap().clone();
+        let drop_packet = should_drop();
 
-    Box::pin(async move {
-        if drop_packet {
-            return true;
-        }
+        Box::pin(async move {
+            if drop_packet {
+                return true;
+            }
 
-        let Some(peer) = peer.and_then(|it| it.upgrade()) else {
-            return false;
-        };
+            let Some(peer) = peer.and_then(|it| it.upgrade()) else {
+                return false;
+            };
 
-        peer.enqueue(&payload);
-        true
-    })
-}
-
-fn left_transport<'a>(data: &'a [u8]) -> TransportFuture<'a> {
-    peer_transport(&RIGHT_PEER, data)
-}
-
-fn right_transport<'a>(data: &'a [u8]) -> TransportFuture<'a> {
-    peer_transport(&LEFT_PEER, data)
+            peer.enqueue(&payload);
+            true
+        })
+    }
 }
 
 fn make_payload(len: usize, salt: u8) -> Vec<u8> {
@@ -63,8 +55,8 @@ fn unwrap_arc<T>(value: Arc<T>, name: &str) -> T {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn tokiokcp_can_transfer_complete_payload_under_packet_loss() {
-    let left = Arc::new(TokioKcp::new(7, left_transport));
-    let right = Arc::new(TokioKcp::new(7, right_transport));
+    let left = Arc::new(TokioKcp::new(7, peer_transport(&RIGHT_PEER)));
+    let right = Arc::new(TokioKcp::new(7, peer_transport(&LEFT_PEER)));
 
     *LEFT_PEER.lock().unwrap() = Some(Arc::downgrade(&left));
     *RIGHT_PEER.lock().unwrap() = Some(Arc::downgrade(&right));

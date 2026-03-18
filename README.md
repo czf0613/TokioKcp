@@ -25,7 +25,7 @@
 
 ```toml
 [dependencies]
-tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.0.2" }
+tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.1.0" }
 ```
 
 ## 设计说明

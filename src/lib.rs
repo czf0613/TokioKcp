@@ -37,7 +37,8 @@ enum KcpAction {
     Enqueue(Vec<u8>),
 }
 
-pub type DGCallBack = for<'a> fn(&'a [u8]) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
+pub type DGFuture = Pin<Box<dyn Future<Output = bool> + Send + 'static>>;
+pub type DGCallBack = Arc<dyn Fn(Vec<u8>) -> DGFuture + Send + Sync + 'static>;
 
 struct KcpCtx {
     dispatch_queue: mpsc::UnboundedSender<KcpAction>,
@@ -81,7 +82,11 @@ impl TokioKcp {
     pub const DEFAULT_MTU: u32 = 1400;
     pub const DEFAULT_REFRESH_GAP: u64 = 20;
 
-    pub fn new(conv_id: u32, on_send: DGCallBack) -> Self {
+    pub fn new<F, Fut>(conv_id: u32, on_send: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static,
+    {
         Self::with_mtu_and_refresh_gap(
             conv_id,
             Self::DEFAULT_MTU,
@@ -90,18 +95,26 @@ impl TokioKcp {
         )
     }
 
-    pub fn with_mtu(conv_id: u32, mtu: u32, on_send: DGCallBack) -> Self {
+    pub fn with_mtu<F, Fut>(conv_id: u32, mtu: u32, on_send: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static,
+    {
         Self::with_mtu_and_refresh_gap(conv_id, mtu, Self::DEFAULT_REFRESH_GAP, on_send)
     }
 
-    pub fn with_mtu_and_refresh_gap(
+    pub fn with_mtu_and_refresh_gap<F, Fut>(
         conv_id: u32,
         mtu: u32,
         refresh_gap: u64,
-        on_send: DGCallBack,
-    ) -> Self {
+        on_send: F,
+    ) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static,
+    {
         let (tx, mut rx) = mpsc::unbounded_channel::<KcpAction>();
-        let transport = on_send;
+        let transport: DGCallBack = Arc::new(move |data| Box::pin(on_send(data)));
 
         let mut ctx_box = Box::new(KcpCtx {
             dispatch_queue: tx.clone(),
@@ -168,7 +181,7 @@ impl TokioKcp {
                                 }
                                 KcpAction::DGSocket(data) => {
                                     if !data.is_empty() {
-                                        let _ = (transport)(&data).await;
+                                        let _ = (transport)(data).await;
                                     }
                                 }
                                 KcpAction::Write(data) => {
