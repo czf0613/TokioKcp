@@ -21,7 +21,14 @@
 
 ## 安装
 
-当前推荐直接通过 git URL 引用这个仓库，并指定对应版本 tag，不需要先克隆到本地：
+可以直接通过 crates.io 引用：
+
+```toml
+[dependencies]
+tokio-kcp-neo = "0.1.1"
+```
+
+如果你希望固定到仓库里的某个 tag，或者想直接跟踪 git 版本，也可以直接通过 git URL 引用：
 
 ```toml
 [dependencies]
