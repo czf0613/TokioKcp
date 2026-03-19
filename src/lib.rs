@@ -215,7 +215,7 @@ impl TokioKcp {
             .send(KcpAction::Write(data.to_vec()));
     }
 
-    pub async fn read(&self, exact_bytes: usize) -> Vec<u8> {
+    pub async fn read_exact(&self, exact_bytes: usize) -> Vec<u8> {
         if exact_bytes == 0 {
             return Vec::new();
         }
@@ -229,6 +229,34 @@ impl TokioKcp {
 
             drop(buffer_lock);
             notified.await;
+        }
+    }
+
+    // 取出所有可用的数据，确保一定不会拿到空数组
+    pub async fn read(&self) -> Vec<u8> {
+        loop {
+            let notified = self.read_notify.notified();
+
+            let mut buffer_lock = self.read_buffer.lock().await;
+            let stored_bytes_len = buffer_lock.len();
+            if stored_bytes_len > 0 {
+                return buffer_lock.drain(..stored_bytes_len).collect();
+            }
+
+            drop(buffer_lock);
+            notified.await;
+        }
+    }
+
+    /// 立即取出所有的数据，但是可能拿到空数组
+    pub async fn read_no_wait(&self) -> Vec<u8> {
+        let mut buffer_lock = self.read_buffer.lock().await;
+        let stored_bytes_len = buffer_lock.len();
+
+        if stored_bytes_len > 0 {
+            return buffer_lock.drain(..stored_bytes_len).collect();
+        } else {
+            return Vec::new();
         }
     }
 

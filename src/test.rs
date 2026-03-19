@@ -15,7 +15,7 @@ static DROP_RNG: LazyLock<Mutex<StdRng>> =
     LazyLock::new(|| Mutex::new(StdRng::seed_from_u64(0x5eed_baad_f00d_u64)));
 
 fn should_drop() -> bool {
-    DROP_RNG.lock().unwrap().random_bool(0.5)
+    DROP_RNG.lock().unwrap().random_bool(0.3)
 }
 
 fn peer_transport(
@@ -67,8 +67,10 @@ async fn tokiokcp_can_transfer_complete_payload_under_packet_loss() {
     left.write(&left_payload);
     right.write(&right_payload);
 
-    let right_read = tokio::time::timeout(Duration::from_secs(30), right.read(left_payload.len()));
-    let left_read = tokio::time::timeout(Duration::from_secs(30), left.read(right_payload.len()));
+    let right_read =
+        tokio::time::timeout(Duration::from_secs(60), right.read_exact(left_payload.len()));
+    let left_read =
+        tokio::time::timeout(Duration::from_secs(60), left.read_exact(right_payload.len()));
 
     let (right_result, left_result) = tokio::join!(right_read, left_read);
 

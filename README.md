@@ -25,7 +25,7 @@
 
 ```toml
 [dependencies]
-tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.1.0" }
+tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.1.1" }
 ```
 
 ## 设计说明
@@ -35,7 +35,7 @@ tokio-kcp-neo = { git = "https://github.com/czf0613/TokioKcp.git", tag = "0.1.0"
 1. `write()` 把数据交给 KCP
 2. KCP 需要发包时，通过你提供的异步回调把 datagram 发到底层传输层
 3. 你从 UDP 或其他不可靠传输层收到 datagram 后，调用 `enqueue()` 喂回 KCP
-4. KCP 组包完成后，通过 `read()` 按指定长度读出数据
+4. KCP 组包完成后，可以按需调用 `read_exact()`、`read()` 或 `read_no_wait()` 取出数据
 
 ## API
 
@@ -46,30 +46,48 @@ impl TokioKcp {
     pub const DEFAULT_MTU: u32 = 1400;
     pub const DEFAULT_REFRESH_GAP: u64 = 20;
 
-    pub fn new(conv_id: u32, on_send: DGCallBack) -> Self;
-    pub fn with_mtu(conv_id: u32, mtu: u32, on_send: DGCallBack) -> Self;
-    pub fn with_mtu_and_refresh_gap(
+    pub fn new<F, Fut>(conv_id: u32, on_send: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static;
+
+    pub fn with_mtu<F, Fut>(conv_id: u32, mtu: u32, on_send: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static;
+
+    pub fn with_mtu_and_refresh_gap<F, Fut>(
         conv_id: u32,
         mtu: u32,
         refresh_gap: u64,
-        on_send: DGCallBack,
-    ) -> Self;
+        on_send: F,
+    ) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = bool> + Send + 'static;
 
     pub fn write(&self, data: &[u8]);
     pub fn enqueue(&self, data: &[u8]);
-    pub async fn read(&self, exact_bytes: usize) -> Vec<u8>;
+    pub async fn read_exact(&self, exact_bytes: usize) -> Vec<u8>;
+    pub async fn read(&self) -> Vec<u8>;
+    pub async fn read_no_wait(&self) -> Vec<u8>;
     pub async fn shutdown(self);
 }
 ```
 
-发送回调类型：
+发送回调的约定是：
 
 ```rust
-pub type DGCallBack =
-    for<'a> fn(&'a [u8]) -> Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
+Fn(Vec<u8>) -> impl Future<Output = bool> + Send + 'static
 ```
 
-它的含义是：当 KCP 需要把底层报文发出去时，你需要提供一个异步函数，把这段字节真正发到 UDP socket、隧道或你自己的传输层里。
+它的含义是：当 KCP 需要把底层报文发出去时，你需要提供一个可捕获环境的异步回调，把这段字节真正发到 UDP socket、隧道或你自己的传输层里。
+
+其中：
+
+- `read_exact(exact_bytes)` 会等待，直到缓冲区里至少有指定长度的数据可读
+- `read()` 会等待，直到缓冲区里至少有一批数据可读，然后一次性取出当前全部数据
+- `read_no_wait()` 会立刻取出当前缓冲区里的全部数据；如果当前没有数据，会返回空 `Vec`
 
 ## 最小使用流程
 
@@ -80,7 +98,7 @@ use tokio_kcp_neo::TokioKcp;
 // 2. 创建 TokioKcp::new(conv, callback)
 // 3. 上层写数据时调用 write()
 // 4. 底层收到 datagram 时调用 enqueue()
-// 5. 业务侧通过 read(exact_bytes).await 取回完整数据
+// 5. 业务侧按需要调用 read_exact() / read() / read_no_wait()
 // 6. 结束时调用 shutdown().await
 ```
 
@@ -114,6 +132,7 @@ cargo test
 
 ## 说明
 
-- `read(exact_bytes)` 目前是按“精确长度”读取的接口
+- `read_exact(exact_bytes)` 适合你已经知道期望长度的场景
+- `read()` 会等待至少一批数据到达，然后把当前缓冲区全部取走
 - 当前 API 还比较轻量，后续可以继续扩展成更完整的 stream 风格封装
 - C 构建产物是 Cargo 的中间产物，通常位于 `target/<profile>/build/<pkg-hash>/out/`
